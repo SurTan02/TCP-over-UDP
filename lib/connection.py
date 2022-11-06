@@ -1,19 +1,22 @@
-import socket
+from socket import socket as Socket, AF_INET, SOCK_DGRAM
 from .segment import Segment
+from typing import Tuple, List
+
 
 class Connection:
-    def __init__(self, ip : str, port : int):
-        # Init UDP socket
-        pass
+    socket: Socket
 
-    def send_data(self, msg : Segment, dest : ("ip", "port")):
-        # Send single segment into destination
-        pass
+    def __init__(self, ip: str, port: int):
+        self.socket = Socket(AF_INET, SOCK_DGRAM)
+        self.socket.settimeout(2)
+        self.socket.bind((ip, port))
 
-    def listen_single_segment(self) -> Segment:
-        # Listen single UDP datagram within timeout and convert into segment
-        pass
+    def send(self, msg: Segment, dest: Tuple[str, int]):
+        self.socket.sendto(msg.bytes, dest)
+
+    def listen(self) -> Tuple[Segment, Tuple[str, int]]:
+        data, addr = self.socket.recvfrom(32768)
+        return Segment(data), addr
 
     def close_socket(self):
-        # Release UDP socket
-        pass
+        self.socket.close()
