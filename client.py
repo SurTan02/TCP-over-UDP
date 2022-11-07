@@ -39,7 +39,7 @@ class Client:
         if state == "LISTEN":
             if header['flag'] == "SYN":
                 self.connection['headers'].append(header)
-                self.socket.send(Segment.ACK(), addr)
+                self.socket.send(Segment.SYN_ACK(), addr)
                 self.connection['state'] = "SYN_SENT"
         elif state == "SYN_RCVD":
             if header['flag'] == "ACK":
@@ -49,6 +49,7 @@ class Client:
         elif state == "SYN_SENT":
             if header['flag'] == "SYN-ACK":
                 self.connection['headers'].append(header)
+                self.socket.send(Segment.ACK(), addr)
                 self.connection['state'] = "ESTABLISHED"
                 print("SocketConnection established with", addr)
 
