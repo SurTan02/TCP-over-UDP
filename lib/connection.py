@@ -1,9 +1,18 @@
 from socket import socket as Socket, AF_INET, SOCK_DGRAM
-from .segment import Segment
-from typing import Tuple, List
+from .segment import Segment, SegmentHeader
+from typing import Tuple, List, TypedDict
 
 
-class Connection:
+# State for connection
+class Connection(TypedDict):
+    addr: Tuple[str, int]
+    headers: List[SegmentHeader]
+    payloads: bytes
+    # State is ENUM (LISTEN, SYN_RCVD, SYN_SENT, ESTABLISHED, FIN_WAIT_1, FIN_WAIT_2, CLOSE_WAIT, LAST_ACK)
+    state: str
+
+
+class SocketConnection:
     socket: Socket
 
     def __init__(self, ip: str, port: int):

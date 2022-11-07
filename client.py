@@ -1,21 +1,20 @@
-from lib.connection import Connection
+from lib.connection import SocketConnection, Connection
 from lib.segment import Segment, SegmentHeader
 from typing import Tuple, List, Dict
 
 
 class Client:
-    connection: Connection
+    socket: SocketConnection
     addr: Tuple[str, int]
-    headers: List[SegmentHeader]
-    payloads: bytes
+    connection: Connection
 
     def __init__(self, ip: str, port: int):
-        self.connection = Connection(ip, port)
-        self.headers = []
+        self.socket = SocketConnection(ip, port)
+        self.connection = None
         self.addr = None
 
     def listen(self):
-        seg, addr = self.connection.listen()
+        seg, addr = self.socket.listen()
         is_valid = seg.valid_checksum()
 
         if is_valid:
@@ -24,45 +23,50 @@ class Client:
             print("Invalid checksum from", addr)
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
-        if self.addr is None or addr != self.addr:
+        if self.addr is None:
             self.addr = addr
-            self.headers = []
-            self.payloads = b""
+            self.connection = {
+                'addr': addr,
+                'headers': [],
+                'payloads': b"",
+                'state': "LISTEN"
+            }
 
         header = seg.header
 
-        # Handle Three Way Handshake
-        # If client connections is empty, check if it's a SYN packet
-        if len(self.headers) == 0:
+        # Connection State
+        state = self.connection['state']
+        if state == "LISTEN":
             if header['flag'] == "SYN":
-                self.headers.append(header)
-                self.connection.send(Segment.SYN_ACK(), addr)
-
-            if header['flag'] == "SYN-ACK":
-                self.headers.append(header)
-                self.connection.send(Segment.ACK(), addr)
-                print("Connection established with", addr)
-
-        # If client connections has 1 packet, check if it's a ACK packet
-        elif len(self.headers) == 1:
+                self.connection['headers'].append(header)
+                self.socket.send(Segment.ACK(), addr)
+                self.connection['state'] = "SYN_SENT"
+        elif state == "SYN_RCVD":
             if header['flag'] == "ACK":
-                self.headers.append(header)
-                print("Connection established with", addr)
+                self.connection['headers'].append(header)
+                self.connection['state'] = "ESTABLISHED"
+                print("SocketConnection established with", addr)
+        elif state == "SYN_SENT":
+            if header['flag'] == "SYN-ACK":
+                self.connection['headers'].append(header)
+                self.connection['state'] = "ESTABLISHED"
+                print("SocketConnection established with", addr)
 
-    def _is_connected(self, ip: str, port: int) -> bool:
-        if self.addr or len(self.headers) < 2:
-            return False
-
-        # Check if three way handshake is done
-        return (self.headers[0]['flag'] == "SYN" and self.headers[(ip, port)[1]['flag'] == "ACK"]) or \
-            self.headers[0]['flag'] == "SYN-ACK"
+        # Tinggal tambahin case aja berdasarkan state sama flag
 
     def connect(self, ip: str, port: int):
-        self.connection.send(Segment.SYN(), (ip, port))
+        self.socket.send(Segment.SYN(), (ip, port))
+        self.addr = (ip, port)
+        self.connection = {
+            'addr': self.addr,
+            'headers': [],
+            'payloads': b"",
+            'state': "SYN_SENT"
+        }
         self.listen()
 
 
 if __name__ == '__main__':
     main = Client("127.0.0.1", 7001)
     main.connect("127.0.0.1", 7000)
-    print(main.headers)
+    print(main.connection)

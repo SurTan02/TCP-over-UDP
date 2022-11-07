@@ -7,6 +7,8 @@ SYN_FLAG = 0b1000
 ACK_FLAG = 0b0100
 SYN_ACK_FLAG = 0b1100
 FIN_FLAG = 0b0010
+FIN_ACK_FLAG = 0b0110
+RST_FLAG = 0b0001
 DEFAULT_FLAG = 0b0000
 
 # Change this to set SEGMENT_SIZE, minimum is 12 (header only)
@@ -198,6 +200,30 @@ class Segment:
                 "seq_num": 1,
                 "ack_num": 1,
                 "flag": SegmentFlag.get_flag("ACK"),
+                "checksum": None
+            },
+            payload=b""
+        )
+
+    @staticmethod
+    def FIN():
+        return Segment(
+            header={
+                "seq_num": 1,
+                "ack_num": 1,
+                "flag": SegmentFlag.get_flag("FIN"),
+                "checksum": None
+            },
+            payload=b""
+        )
+
+    @staticmethod
+    def FIN_ACK():
+        return Segment(
+            header={
+                "seq_num": 1,
+                "ack_num": 1,
+                "flag": SegmentFlag.get_flag("FIN-ACK"),
                 "checksum": None
             },
             payload=b""
