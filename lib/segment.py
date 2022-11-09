@@ -47,6 +47,8 @@ class SegmentFlag:
             return "SYN-ACK"
         elif self.flag == FIN_FLAG:
             return "FIN"
+        elif self.flag == FIN_ACK_FLAG:
+            return "FIN-ACK"
         elif self.flag == DEFAULT_FLAG:
             return "DEFAULT"
         else:
@@ -71,6 +73,8 @@ class SegmentFlag:
         elif flag == "SYN-ACK":
             return SegmentFlag(SYN_ACK_FLAG)
         elif flag == "FIN":
+            return SegmentFlag(FIN_ACK_FLAG)
+        elif flag == "FIN-ACK":
             return SegmentFlag(FIN_FLAG)
         elif flag == "DEFAULT":
             return SegmentFlag(DEFAULT_FLAG)
@@ -197,7 +201,7 @@ class Segment:
     def ACK():
         return Segment(
             header={
-                "seq_num": 1,
+                "seq_num": 0,
                 "ack_num": 1,
                 "flag": SegmentFlag.get_flag("ACK"),
                 "checksum": None
@@ -209,7 +213,7 @@ class Segment:
     def FIN():
         return Segment(
             header={
-                "seq_num": 1,
+                "seq_num": 0,
                 "ack_num": 1,
                 "flag": SegmentFlag.get_flag("FIN"),
                 "checksum": None
@@ -221,7 +225,7 @@ class Segment:
     def FIN_ACK():
         return Segment(
             header={
-                "seq_num": 1,
+                "seq_num": 0,
                 "ack_num": 1,
                 "flag": SegmentFlag.get_flag("FIN-ACK"),
                 "checksum": None
