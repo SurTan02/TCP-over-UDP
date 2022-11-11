@@ -1,9 +1,11 @@
-from lib.segment import Segment, SegmentHeader, SegmentFlag
-from lib.connection import SocketConnection, Connection
-from typing import Tuple, List, Dict
-import math, socket
+import math
+import socket
+from typing import Dict, List, Tuple
 
-SEGMENT_SIZE = 32768
+from lib.connection import Connection, SocketConnection
+from lib.segment import Segment, SegmentFlag, SegmentHeader
+
+SEGMENT_SIZE = 32756
 
 class Server:
     socket: SocketConnection
@@ -71,51 +73,48 @@ class Server:
     # def file_transfer(self, client_addr : ("ip", "port")):
     def file_transfer(self):
         # File transfer, server-side, Send file to 1 client
-
         Sb = 0                                      # Seq_Base
         N = 4                                       # Ukuran Window
-        Sw = min(Sb + N, self.segmentCount)         # Sliding Window
-        Sm = Sw + 1                                 # Sequence Max
+        Sm = min(Sb + N, self.segmentCount)         # Sequence Max / Sliding Window
 
         seg, addr = self.socket.listen()
         with open(self.path, 'rb') as srcFile:
             print(f"[!] Sending file content...")
             
+            
             while Sb < self.segmentCount:
                 try:
-                    for i in range(Sw - Sb):
-                        
-                        srcFile.seek(SEGMENT_SIZE * (Sb + i))
+                    for i in range(Sm - Sb):
+                        srcFile.seek(SEGMENT_SIZE * (Sb + i))    
                         data = Segment(header={
                             "seq_num" : Sb+i, 
                             "ack_num" : 0,
                             "flag" : SegmentFlag.get_flag("ACK"),
                             "checksum" : None
                             }, 
-                            payload = srcFile.read(SEGMENT_SIZE)
+                            payload = srcFile.read(SEGMENT_SIZE),
                             )
+
                         self.socket.send(data, addr)
                         print(f"[!] Sending segment with Sn {Sb + i}")
                     
-                    Sm = Sw - Sb
-                    while Sb < Sm:
+                    for i in range(Sm - Sb):
                         seg, addr = self.socket.listen()
                         isValid = seg.valid_checksum()
 
                         if isValid and seg.get_flag() == "ACK":
                             Rn = seg.get_header()["ack_num"]
-                            if (Rn == Sb):
-                                Sb += 1
-                                Sw += 1
-                                print(f"[!] Received ACK {Rn}")
+                            if (Rn >= Sb):
+                                Sb = Rn + 1
+                                Sm = min(Sb + N, self.segmentCount) 
+                                print(f"[!] Received ACK {Rn} | Sb = {Sb}")
                                 
-                            elif Rn > Sb:
-                                print(f"[!] Received ACK {Rn}")
-                                # Sm = Sm - Sb + Rn
-                                Sb = Rn
-                                
+                            # If Rn < Sb, Resend Segment Rn
                             else:
-                                print(f"[!] ACK number {Rn} < Sb ({Sb}), ignoring...")
+                                print(f"[!] ACK number {Rn} < Sb ({Sb}) | Resending segment with Sn {Rn}")
+                                Sb = Rn
+                                break           
+
                         elif not isValid:
                             print(f"[!] Checksum failed")
                             break
@@ -129,7 +128,10 @@ class Server:
         self.socket.send(Segment.FIN(), addr)
 
 if __name__ == '__main__':
-    server = Server("127.0.0.1", 7000, "./dump/bro.txt")
+    # server = Server("127.0.0.1", 7000, "./dump/404.png")
+    server = Server("127.0.0.1", 7000, "./dump/soal.pdf")
+    # server = Server("127.0.0.1", 7000, "./dump/SPIRIT.mp3")
+    # server = Server("127.0.0.1", 7000, "./dump/bro.txt")
     print(f"[!] Server started at 127.0.0.1:7000...")
     while True:
 

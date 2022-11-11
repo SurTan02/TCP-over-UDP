@@ -87,43 +87,51 @@ class Client:
     def listen_file_transfer(self):
         print(f"[!] Receiving file content...")
 
-        with open(self.path, "wb") as dstFile:
-            Rn = 0
-            while True:
-                try:
-                    seg, addr = self.socket.listen()
-                    is_valid = seg.valid_checksum()
+        fileBuffer = dict()
+        Rn = 0
+        while True:
+            try:
+                seg, addr = self.socket.listen()
+                is_valid = seg.valid_checksum()
 
-                    if is_valid and addr == self.addr:
-                        Sn = seg.get_header()["seq_num"]
-                        if Rn == Sn:
-                            print(f"[!] Sn={Rn} Received, sending ACK {Rn}")
+                if is_valid and addr == self.addr:
+                    Sn = seg.get_header()["seq_num"]
+                    if Rn == Sn:
+                        print(f"[!] Sn={Rn} Received, sending ACK {Rn}")
 
-                            dstFile.write(seg.get_payload().rstrip(b'\x00'))
-                            
+                        fileBuffer[Rn] = seg.get_payload()
 
-                            # Send acknowledgement for last received segment
-                            self._send_ack(Rn)
-                            Rn += 1
+                        # Send acknowledgement for last received segment
+                        self._send_ack(Rn)
+                        Rn += 1
 
-                        # End of file
-                        elif seg.get_flag() == "FIN":
-                            print(f"[!] Successfully received file")
-                            
-                            # Send acknowledgement for last received segment
-                            self.socket.send(seg.FIN_ACK(), self.addr)
-                            break
-                        else:
-                            # Refuse segment
-                            print(f"[!] Sn not equal with Rn ({Sn} =/= {Rn}), ignoring...")
+                    # End of file
+                    elif seg.get_flag() == "FIN":
+                        print(f"[!] Successfully received file")
+                        
+                        
+                        fileBuffer[Rn-1] = fileBuffer[Rn-1].rstrip(b'\x00')
+                        with open(self.path, 'wb+') as file:
+                            for key in fileBuffer.keys():
+                                file.write(fileBuffer[key])
+
+                        # Send acknowledgement for last received segment
+                        self.socket.send(seg.FIN_ACK(), self.addr)
+                        break
                     else:
-                        print(f'[!] Checksum failed')
-                except socket.timeout:
-                    print(f"[!] timeout, resending ACK {Rn-1}...")
-                    self._send_ack(Rn)
+                        # Refuse segment
+                        print(f"[!] Sn not equal with Rn ({Sn} =/= {Rn}), ignoring...")
+                else:
+                    print(f'[!] Checksum failed')
+            except socket.timeout:
+                print(f"[!] timeout, resending ACK {Rn-1}...")
+                self._send_ack(Rn)
 
 if __name__ == '__main__':
-    main = Client("127.0.0.1", 7001, "./dump/tes.txt")
+    main = Client("127.0.0.1", 7001, "./dump/terima.pdf")
+    # main = Client("127.0.0.1", 7001, "./dump/terima.mp3")
+    # main = Client("127.0.0.1", 7001, "./dump/ata.png")
+    # main = Client("127.0.0.1", 7001, "./dump/tes.txt")
     main.connect("127.0.0.1", 7000)
 
     main.listen()
