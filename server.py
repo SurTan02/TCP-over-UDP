@@ -124,7 +124,7 @@ class Server:
             (seq_num - 1) * Segment.SEGMENT_PAYLOAD)
         seq = Segment(
             header=SegmentHeader(
-                seq_num=(seq_num % WINDOW_SIZE),
+                seq_num=((seq_num-1) % WINDOW_SIZE) + 1,
                 ack_num=seq_num,
                 flag=SegmentFlag(0b0000),
                 checksum=None
@@ -189,4 +189,4 @@ if __name__ == '__main__':
         for conn in server.connections.keys():
             if server.connections[conn]['state'] == "ESTABLISHED":
                 print(f"[!] Sending file to {conn[0]}:{conn[1]}")
-                server.file_transfer(conn, "files/test.jpg")
+                server.file_transfer(conn, "files/test.pdf")
