@@ -8,7 +8,7 @@ ACK_FLAG = 0b0100
 SYN_ACK_FLAG = 0b1100
 FIN_FLAG = 0b0010
 FIN_ACK_FLAG = 0b0110
-RST_FLAG = 0b0001
+META_FLAG = 0b0001
 DEFAULT_FLAG = 0b0000
 
 # Change this to set SEGMENT_SIZE, minimum is 12 (header only)
@@ -49,6 +49,8 @@ class SegmentFlag:
             return "FIN"
         elif self.flag == FIN_ACK_FLAG:
             return "FIN-ACK"
+        elif self.flag == META_FLAG:
+            return "META"
         elif self.flag == DEFAULT_FLAG:
             return "DEFAULT"
         else:
@@ -76,6 +78,8 @@ class SegmentFlag:
             return SegmentFlag(FIN_ACK_FLAG)
         elif flag == "FIN-ACK":
             return SegmentFlag(FIN_FLAG)
+        elif flag == "META":
+            return SegmentFlag(META_FLAG)
         elif flag == "DEFAULT":
             return SegmentFlag(DEFAULT_FLAG)
         else:
@@ -92,6 +96,9 @@ class SegmentHeader(TypedDict):
 
 class Segment:
     data: bytes = unpack(FULL_SEGMENT_FORMAT, b'\x00' * SEGMENT_SIZE)[0]
+    # -- Constants --
+    SEGMENT_PAYLOAD = SEGMENT_SIZE - HEADER_SIZE
+
     # -- Internal Function --
 
     def __init__(self, bytes: bytes = None, header: SegmentHeader = None, payload: bytes = None):
@@ -112,8 +119,10 @@ class Segment:
             self.data = bytes
 
     def __str__(self):
-        # Optional, override this method for easier
-        return str(self.header)
+        res = "|"
+        for key, value in self.header.items():
+            res += f"{key}: {value}" + "|"
+        return res
 
     def _calculate_checksum(self) -> int:
         # do 16 bit checksum without data.header['checksum'] part
@@ -153,6 +162,9 @@ class Segment:
 
     def get_payload(self) -> bytes:
         return unpack(PAYLOAD_FORMAT, self.data[HEADER_SIZE:])[0]
+
+    def get_trimmed_payload(self) -> bytes:
+        return self.get_payload().rstrip(b'\x00')
 
     # -- Marshalling --
 
@@ -198,11 +210,11 @@ class Segment:
         )
 
     @staticmethod
-    def ACK():
+    def ACK(seq_num: int = 1, ack_num: int = 1):
         return Segment(
             header={
-                "seq_num": 0,
-                "ack_num": 1,
+                "seq_num": seq_num,
+                "ack_num": ack_num,
                 "flag": SegmentFlag.get_flag("ACK"),
                 "checksum": None
             },
