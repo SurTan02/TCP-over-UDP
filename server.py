@@ -26,6 +26,9 @@ class Server:
                 print("Invalid checksum from", addr)
         except Exception as e:
             # Handle Timeout
+            for conn in self.connections.values():
+                if conn['state'] == "SND_FILE":
+                    self._send_window(conn['addr'], conn['ack_num'])
             print(f"[!] Error: {e}")
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
@@ -189,4 +192,4 @@ if __name__ == '__main__':
         for conn in server.connections.keys():
             if server.connections[conn]['state'] == "ESTABLISHED":
                 print(f"[!] Sending file to {conn[0]}:{conn[1]}")
-                server.file_transfer(conn, "files/test.pdf")
+                server.file_transfer(conn, "files/numbers.txt")
