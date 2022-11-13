@@ -29,6 +29,9 @@ class Server:
             for conn in self.connections.values():
                 if conn['state'] == "SND_FILE":
                     self._send_window(conn['addr'], conn['ack_num'])
+            for conn in self.connections.values():
+                if conn['state'] == "SND_FILE":
+                    self._send_window(conn['addr'], conn['ack_num'])
             print(f"[!] Error: {e}")
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
