@@ -25,10 +25,12 @@ class SocketConnection:
         self.socket.bind((ip, port))
 
     def send(self, msg: Segment, dest: Tuple[str, int]):
+        print(">", dest, msg)
         self.socket.sendto(msg.bytes, dest)
 
     def listen(self) -> Tuple[Segment, Tuple[str, int]]:
         data, addr = self.socket.recvfrom(32768)
+        print("<", addr, Segment(data))
         return Segment(data), addr
 
     def close_socket(self):

@@ -244,3 +244,28 @@ class Segment:
             },
             payload=b""
         )
+
+    # Dummy segment for testing
+    @staticmethod
+    def DEFAULT(seq_num: int, ack_num: int):
+        return Segment(
+            header={
+                "seq_num": seq_num,
+                "ack_num": ack_num,
+                "flag": SegmentFlag.get_flag("DEFAULT"),
+                "checksum": None
+            },
+            payload=b""
+        )
+
+    @staticmethod
+    def META():
+        return Segment(
+            header={
+                "seq_num": 1,
+                "ack_num": 1,
+                "flag": SegmentFlag.get_flag("META"),
+                "checksum": None
+            },
+            payload=b""
+        )

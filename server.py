@@ -29,9 +29,6 @@ class Server:
             for conn in self.connections.values():
                 if conn['state'] == "SND_FILE":
                     self._send_window(conn['addr'], conn['ack_num'])
-            for conn in self.connections.values():
-                if conn['state'] == "SND_FILE":
-                    self._send_window(conn['addr'], conn['ack_num'])
             print(f"[!] Error: {e}")
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
@@ -44,7 +41,6 @@ class Server:
                 'state': "LISTEN",
                 'curFile': None,
                 'curFileSize': 0,
-                'buf': [],
             }
 
         header = seg.header
@@ -71,7 +67,6 @@ class Server:
                 self.connections[addr]['ack_num'] = 1
                 print("SocketConnection established with", addr)
 
-        # Metadata Format: <filename>:<filesize> less than 32 MB
         # Send Metadata File
         elif state == "SND_META":
             if header['flag'] == "ACK":
@@ -85,44 +80,42 @@ class Server:
 
         # Send File with Go-Back-N ARQ
         elif state == "SND_FILE":
-            
-            segmentCount = math.ceil(self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD)
-            Sb = self.connections[addr]['ack_num'] + WINDOW_SIZE
-            Sm = min(Sb + WINDOW_SIZE, segmentCount)          # Sequence Max / Sliding Window
-
-                    
             if header['flag'] == "ACK":
                 # If it's the correct segment
-                # Rn = seg.get_header()['seq_num']
-                # print(f"Rn = {Rn} | ACK_sesg = {self.connections[addr]['ack_num']} | Sn Client = {self.connections[addr]['seq_num']}")
-                if (self.connections[addr]['ack_num']) >= seg.get_header()['seq_num']:
-                    # Slide window
+                # Only accept the first ack in the window (Sb is self.connections[addr]['ack_num'])
+                if header['seq_num'] == self.connections[addr]['ack_num']:
+                    # TODO: Improve this to handle store acks in buffer before sliding the window
+                    print(
+                        f"[!] {addr} RCV ACK {header['seq_num']} | REQ {header['ack_num']}")
+                    # Preparing to send the next sequence
+                    # Update seq_num and ack_num
+                    self.connections[addr]['seq_num'] = header['ack_num']
+                    self.connections[addr]['ack_num'] = header['seq_num'] + 1
 
-                    # # Increase seq number by 1
-                    # self.connections[addr]['seq_num'] = header['ack_num']
-
-                    # Increase ack number by 1
-                    self.connections[addr]['ack_num'] += 1
-                    self._send_seq(addr, self.connections[addr]['ack_num'])
-                    print(f"[!] RCV ACK {self.connections[addr]['ack_num']- 1} | Sending segment {self.connections[addr]['ack_num']}")
-
+                    segmentCount = math.ceil(
+                        self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD)
+                    # Sliding Window First Sequence
+                    Sb = self.connections[addr]['ack_num']
+                    # Sliding Window Last Sequencee
+                    Sm = min(Sb + WINDOW_SIZE, segmentCount)
+                    if (header['ack_num']) <= Sm:
+                        print("[!] Sending sequence",
+                              header['ack_num'] + WINDOW_SIZE - 1)
+                        self._send_seq(
+                            addr, header['ack_num'] + WINDOW_SIZE - 1)
                 else:
-                    print(f"[!] ACK number {(self.connections[addr]['ack_num'])} < Sb ({seg.get_header()['seq_num']})")
+                    print(
+                        f"[!] ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
                     self._send_window(addr, self.connections[addr]['ack_num'])
-                
+
                  # If that is the last ack
                 if self.connections[addr]['ack_num'] >= math.ceil(self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD) + 1:
-                    # Send FIN
-                    print(f"[!] RCV LAST ACK {self.connections[addr]['ack_num']}")
                     print(f"[!] Successfully sent file to {addr[0]}:{addr[1]}")
                     self.socket.send(Segment.FIN(), addr)
                     self.connections[addr]['state'] = "FIN_WAIT_1"
                     self.connections[addr]['curFile'].close()
-                # If it's not
-                # else:
-                    # resend the window
             else:
-                print(f"[!] Checksum failed")           
+                print(f"[!] Checksum failed")
         # Double Two Way Handshake
         elif state == "FIN_WAIT_1":
             if header['flag'] == "FIN-ACK":
@@ -135,42 +128,46 @@ class Server:
                 del self.connections[addr]
                 print("SocketConnection closed with", addr)
 
-    def _send_seq(self, addr: Tuple[str, int], seq_num: int):
+    def _send_seq(self, addr: Tuple[str, int], Sn: int):
+        # Seek file to the correct position
         self.connections[addr]['curFile'].seek(
-            (seq_num - 1) * Segment.SEGMENT_PAYLOAD)
-        self.connections[addr]['curFile'].seek(
-            (seq_num - 1) * Segment.SEGMENT_PAYLOAD)
+            (Sn - 1) * Segment.SEGMENT_PAYLOAD)
+        # Create Segment
         seq = Segment(
             header=SegmentHeader(
-                seq_num=((seq_num-1)) + 1,
-                ack_num=seq_num,
+                seq_num=Sn,
+                ack_num=Sn,
                 flag=SegmentFlag(0b0000),
                 checksum=None
             ),
             payload=self.connections[addr]['curFile'].read(Segment.SEGMENT_PAYLOAD))
-
+        # Send Segment
         self.socket.send(seq, addr)
 
-    def _send_window(self, addr: Tuple[str, int], start_seq: int = 1):
-        if start_seq + WINDOW_SIZE > math.ceil(self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD):
-            end_seq = math.ceil(
+    def _send_window(self, addr: Tuple[str, int], Sb: int = 1):
+        # Get Sm fron the window
+        if Sb + WINDOW_SIZE > math.ceil(self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD):
+            Sm = math.ceil(
                 self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD)
         else:
-            end_seq = start_seq + WINDOW_SIZE - 1
-        for i in range(end_seq - start_seq + 1):
+            Sm = Sb + WINDOW_SIZE - 1
+
+        # Loop from Sb to Sm
+        for i in range(Sm - Sb + 1):
+            # Seek file to the correct position
             self.connections[addr]['curFile'].seek(
-                Segment.SEGMENT_PAYLOAD * (start_seq - 1 + i), 0)
-            self.connections[addr]['curFile'].seek(
-                Segment.SEGMENT_PAYLOAD * (start_seq - 1 + i), 0)
+                Segment.SEGMENT_PAYLOAD * (Sb - 1 + i), 0)
+            # Create Segment
             seg = Segment(
                 header=SegmentHeader(
-                    seq_num=((start_seq - 1 + i)) + 1,
-                    ack_num=(start_seq + i),
+                    seq_num=Sb + i,
+                    ack_num=Sb + i,
                     flag=SegmentFlag(0b0000),
                     checksum=None
                 ),
                 payload=self.connections[addr]['curFile'].read(Segment.SEGMENT_PAYLOAD))
-            print(f"Sending Window | Sequence = {start_seq + i}")
+            # Send Segment
+            print(f"Sending Window | Sequence = {Sb + i}")
             self.socket.send(seg, addr)
 
     # To initiate file transfer, send metadata first
@@ -213,9 +210,13 @@ if __name__ == '__main__':
             server.listen()
 
             # File Transfer
+            count = 0
             for conn in server.connections.keys():
                 if server.connections[conn]['state'] == "ESTABLISHED":
-                    print(f"[!] Sending file to {conn[0]}:{conn[1]}")
-                    # server.file_transfer(conn, "files/ata.png")
-                    server.file_transfer(conn, path)
-                    # server.file_transfer(conn, "files/mbd.pdf")
+                    count += 1
+
+            if count == 2:
+                for conn in server.connections.keys():
+                    if server.connections[conn]['state'] == "ESTABLISHED":
+                        print(f"[!] Sending file to {conn[0]}:{conn[1]}")
+                        server.file_transfer(conn, path)
