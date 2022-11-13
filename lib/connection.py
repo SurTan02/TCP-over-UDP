@@ -21,7 +21,7 @@ class SocketConnection:
 
     def __init__(self, ip: str, port: int):
         self.socket = Socket(AF_INET, SOCK_DGRAM)
-        self.socket.settimeout(6)
+        self.socket.settimeout(2)
         self.socket.bind((ip, port))
 
     def send(self, msg: Segment, dest: Tuple[str, int]):

@@ -41,8 +41,8 @@ class Server:
             # Handle Timeout
             for conn in self.connections.values():
                 print(conn['addr'], ':', conn['state'])
-                if conn['state'] == "SND_FILE":
-                    Thread(target=self._send_window, args=(
+                if conn['state'] == "SND_FILE" and not self.threads[conn['addr']].is_alive():
+                    self.threads[conn['addr']] = Thread(target=self._send_window, args=(
                         conn['addr'], conn['seq_num'])).start()
             print(f"[!] Error: {e}")
             print("Current thread count:", threading.active_count())
@@ -51,13 +51,17 @@ class Server:
     def _distribute(self):
         while len(self.queue) > 0:
             addr, seg = self.queue.pop(0)
-            if addr not in self.threads.keys():
+            if addr not in self.threads.keys() or self.threads[addr] is None:
                 # If the thread doesn't exist, create it
                 self.threads[addr] = Thread(
                     target=self._handle_connection, args=(seg, addr))
                 self.threads[addr].start()
             else:
                 # If the thread exists, wait for it to finish, then create a new one
+
+                # If old sequence is in the queue, ignore it
+                if (seg.header['seq_num'] < self.connections[addr]['ack_num']):
+                    continue
                 self.threads[addr].join()
                 self.threads[addr] = Thread(
                     target=self._handle_connection, args=(seg, addr))
