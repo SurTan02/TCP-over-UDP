@@ -1,3 +1,4 @@
+import sys
 from lib.connection import SocketConnection, Connection
 from lib.segment import Segment, SegmentHeader, SegmentFlag
 from typing import Tuple, List, Dict
@@ -102,16 +103,18 @@ class Client:
                     self.connection['seq_num'], self.connection['ack_num']), addr)
 
         elif state == "RCV_FILE":
+            
             if header['flag'] == "DEFAULT":
+                # Rn = self.connection['ack_num']
                 if (header['seq_num'] != self.connection['ack_num']):
                     print("Wrong seq_num, expected",
-                          self.connection['ack_num'], "got", header['seq_num'])
+                        self.connection['ack_num'], "got", header['seq_num'])
                     return
                 self.connection['payload'] += seg.get_payload()
                 self.connection['seq_num'] = seg.get_header()['ack_num']
-                self.connection['ack_num'] = (
-                    seg.get_header()['seq_num'] % WINDOW_SIZE) + 1
+                self.connection['ack_num'] = (seg.get_header()['seq_num']) + 1
 
+                print(f"Send ACK = {self.connection['seq_num']} | Request Seq = {self.connection['ack_num']}")
                 self.socket.send(Segment.ACK(
                     self.connection['seq_num'], self.connection['ack_num']), addr)
 
@@ -121,6 +124,7 @@ class Client:
                 self.connection['curFile'].write(
                     self.connection['payload'].rstrip(b'\x00'))
                 self.connection['curFile'].close()
+                print(f"[!] Successfully received file from {addr[0]}:{addr[1]}")
                 self.socket.send(Segment.FIN_ACK(), addr)
 
         elif state == "CLOSE_WAIT":
@@ -152,12 +156,22 @@ class Client:
 
 
 if __name__ == '__main__':
-    main = Client("127.0.0.1", 7001)
-    main.connect("127.0.0.1", 7000)
+    if len(sys.argv) != 4:
+        print(f"Error: {len(sys.argv)} arguments given, expected 4")
+        print("client.py [client port] [broadcast port] [path output]")
+    else:
 
-    while True:
-        try:
-            main.listen()
-        except Exception as e:
-            print(f"[!] Error: {e}")
-            continue
+        client = int(sys.argv[1])
+        broadcast = int(sys.argv[2])
+        path = (sys.argv[3])
+
+        main = Client("127.0.0.1", client)
+        main.connect("127.0.0.1", broadcast)
+
+        while True:
+            try:
+                main.listen()
+                
+            except Exception as e:
+                print(f"[!] Error: {e}")
+                continue
