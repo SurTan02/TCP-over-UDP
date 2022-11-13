@@ -3,6 +3,8 @@ import math
 from typing import Dict, List, Tuple
 from lib.connection import Connection, SocketConnection
 from lib.segment import Segment, SegmentFlag, SegmentHeader
+from threading import Thread
+import threading
 
 WINDOW_SIZE = 4
 
@@ -10,10 +12,16 @@ WINDOW_SIZE = 4
 class Server:
     socket: SocketConnection
     connections: Dict[Tuple[str, int], Connection]
+    threads: Dict[Tuple[str, int], Thread]
+    queue: List[Tuple[Tuple[str, int], Segment]]
+    distributor: Thread
 
     def __init__(self, ip: str, port: int):
         self.socket = SocketConnection(ip, port)
         self.connections = {}
+        self.threads = {}
+        self.queue = []
+        self.distributor = None
 
     def listen(self):
         try:
@@ -21,15 +29,39 @@ class Server:
 
             is_valid = seg.valid_checksum()
             if is_valid:
-                self._handle_connection(seg, addr)
+                # Add to queue
+                self.queue.append((addr, seg))
+                # Distribute
+                if (self.distributor is None) or (not self.distributor.is_alive()):
+                    self.distributor = Thread(target=self._distribute)
+                    self.distributor.start()
             else:  # Gatau mo ngapain ini, seharusnya buang aja
                 print("Invalid checksum from", addr)
         except Exception as e:
             # Handle Timeout
             for conn in self.connections.values():
+                print(conn['addr'], ':', conn['state'])
                 if conn['state'] == "SND_FILE":
-                    self._send_window(conn['addr'], conn['ack_num'])
+                    Thread(target=self._send_window, args=(
+                        conn['addr'], conn['seq_num'])).start()
             print(f"[!] Error: {e}")
+            print("Current thread count:", threading.active_count())
+
+    # Function to distribute the queue into threads
+    def _distribute(self):
+        while len(self.queue) > 0:
+            addr, seg = self.queue.pop(0)
+            if addr not in self.threads.keys():
+                # If the thread doesn't exist, create it
+                self.threads[addr] = Thread(
+                    target=self._handle_connection, args=(seg, addr))
+                self.threads[addr].start()
+            else:
+                # If the thread exists, wait for it to finish, then create a new one
+                self.threads[addr].join()
+                self.threads[addr] = Thread(
+                    target=self._handle_connection, args=(seg, addr))
+                self.threads[addr].start()
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
         if addr not in self.connections.keys():
@@ -113,7 +145,6 @@ class Server:
                     print(f"[!] Successfully sent file to {addr[0]}:{addr[1]}")
                     self.socket.send(Segment.FIN(), addr)
                     self.connections[addr]['state'] = "FIN_WAIT_1"
-                    self.connections[addr]['curFile'].close()
             else:
                 print(f"[!] Checksum failed")
         # Double Two Way Handshake
@@ -215,7 +246,7 @@ if __name__ == '__main__':
                 if server.connections[conn]['state'] == "ESTABLISHED":
                     count += 1
 
-            if count == 2:
+            if count == 1:
                 for conn in server.connections.keys():
                     if server.connections[conn]['state'] == "ESTABLISHED":
                         print(f"[!] Sending file to {conn[0]}:{conn[1]}")
