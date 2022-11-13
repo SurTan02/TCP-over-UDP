@@ -1,6 +1,6 @@
 from socket import socket as Socket, AF_INET, SOCK_DGRAM
 from .segment import Segment, SegmentHeader
-from typing import Tuple, List, TypedDict
+from typing import Tuple, List, TypedDict, Union
 from io import BufferedReader, BufferedWriter
 
 
@@ -12,7 +12,7 @@ class Connection(TypedDict):
     payloads: bytes
     # State is ENUM (LISTEN, SYN_RCVD, SYN_SENT, ESTABLISHED, RCV_META, RCV_FILE, SND_META, SND_FILE, FIN_WAIT_1, FIN_WAIT_2, CLOSE_WAIT, LAST_ACK)
     state: str
-    curFile: BufferedWriter | BufferedReader
+    curFile: Union[BufferedReader, BufferedWriter, None]
     curFileSize: int  # in bytes
 
 
