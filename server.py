@@ -167,7 +167,7 @@ class Server:
                     checksum=None
                 ),
                 payload=self.connections[addr]['curFile'].read(Segment.SEGMENT_PAYLOAD))
-            print(f"Resend {start_seq + i}")
+            print(f"Sending Window | Sequence = {start_seq + i}")
             self.socket.send(seg, addr)
 
     # To initiate file transfer, send metadata first
