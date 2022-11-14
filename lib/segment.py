@@ -75,9 +75,9 @@ class SegmentFlag:
         elif flag == "SYN-ACK":
             return SegmentFlag(SYN_ACK_FLAG)
         elif flag == "FIN":
-            return SegmentFlag(FIN_ACK_FLAG)
-        elif flag == "FIN-ACK":
             return SegmentFlag(FIN_FLAG)
+        elif flag == "FIN-ACK":
+            return SegmentFlag(FIN_ACK_FLAG)
         elif flag == "META":
             return SegmentFlag(META_FLAG)
         elif flag == "DEFAULT":

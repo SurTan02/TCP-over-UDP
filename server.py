@@ -60,7 +60,7 @@ class Server:
                 # If the thread exists, wait for it to finish, then create a new one
 
                 # If old sequence is in the queue, ignore it
-                if (seg.header['seq_num'] < self.connections[addr]['ack_num']):
+                if (seg.flag == "DEFAULT" and seg.header['seq_num'] < self.connections[addr]['ack_num']):
                     continue
                 self.threads[addr].join()
                 self.threads[addr] = Thread(
