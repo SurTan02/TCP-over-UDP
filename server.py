@@ -8,6 +8,9 @@ import threading
 
 WINDOW_SIZE = 4
 
+STATE = [
+    "LISTEN", "SYN_RCVD", "SYN_SENT", "ESTABLISHED", "RCV_META", "RCV_FILE", "SND_META", "SND_FILE", "FIN_WAIT_1", "FIN_WAIT_2", "CLOSE_WAIT", "LAST_ACK"]
+
 
 class Server:
     socket: SocketConnection
@@ -41,9 +44,11 @@ class Server:
             # Handle Timeout
             for conn in self.connections.values():
                 print(conn['addr'], ':', conn['state'])
-                if conn['state'] == "SND_FILE" and not self.threads[conn['addr']].is_alive():
+
+                if ((conn['state'] in STATE) and (not self.threads[conn['addr']].is_alive())):
                     self.threads[conn['addr']] = Thread(target=self._send_window, args=(
                         conn['addr'], conn['seq_num'])).start()
+
             print(f"[!] Error: {e}")
             print("Current thread count:", threading.active_count())
 
