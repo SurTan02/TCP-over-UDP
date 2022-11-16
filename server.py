@@ -8,9 +8,6 @@ import threading
 
 WINDOW_SIZE = 4
 
-STATE = [
-    "LISTEN", "SYN_RCVD", "SYN_SENT", "ESTABLISHED", "RCV_META", "RCV_FILE", "SND_META", "SND_FILE", "FIN_WAIT_1", "FIN_WAIT_2", "CLOSE_WAIT", "LAST_ACK"]
-
 
 class Server:
     socket: SocketConnection
@@ -43,16 +40,40 @@ class Server:
         except Exception as e:
             # Handle Timeout
             for conn in self.connections.values():
-                print(conn['addr'], ':', conn['state'])
-
-                if ((conn['state'] in STATE) and (not self.threads[conn['addr']].is_alive())):
-                    self.threads[conn['addr']] = Thread(target=self._send_window, args=(
-                        conn['addr'], conn['seq_num'])).start()
-
+                if self.threads[conn['addr']] is None or not self.threads[conn['addr']].is_alive():
+                    # If time out after sending syn_ack, resend syn_ack
+                    if conn['state'] == "SYN_RCVD":
+                        self.threads[conn['addr']] = Thread(target=self.socket.send(
+                            Segment.SYN_ACK(), conn['addr']))
+                        self.threads[conn['addr']].start()
+                    # If time out after sending metadata, resend metadata
+                    elif conn['state'] == "SND_META":
+                        self.threads[conn['addr']] = Thread(target=self.socket.send(
+                            Segment(
+                                header=SegmentHeader(
+                                    flag=SegmentFlag(0b0010),
+                                    seq_num=conn['seq_num'],
+                                    ack_num=conn['ack_num'],
+                                    checksum=None),
+                                payload=f"{conn['curFileName']}:{conn['curFileSize']}".encode(
+                                )
+                            ), conn['addr']))
+                        self.threads[conn['addr']].start()
+                    elif conn['state'] == "SND_FILE":
+                        self.threads[conn['addr']] = Thread(target=self._send_window(
+                            conn['addr'], conn['ack_num']))
+                        self.threads[conn['addr']].start()
+                    elif conn['state'] == "FIN_WAIT_1":
+                        self.threads[conn['addr']] = Thread(target=self.socket.send(
+                            Segment.FIN(), conn['addr']))
+                        self.threads[conn['addr']].start()
+                    elif conn['state'] == "FIN_WAIT_2":
+                        self.threads[conn['addr']] = Thread(target=self.socket.send(
+                            Segment.FIN_ACK(), conn['addr']))
+                        self.threads[conn['addr']].start()
             print(f"[!] Error: {e}")
             print("Current thread count:", threading.active_count())
 
-    # Function to distribute the queue into threads
     def _distribute(self):
         while len(self.queue) > 0:
             addr, seg = self.queue.pop(0)
@@ -214,7 +235,7 @@ class Server:
     def file_transfer(self, addr, path):
         if self.connections[addr]['state'] != "ESTABLISHED":
             return
-        filename = path.split("/")[-1]
+        self.connections[addr]['curFileName'] = path.split("/")[-1]
         self.connections[addr]['state'] = "SND_META"
         self.connections[addr]['curFile'] = open(path, "rb")
         with open(path, "rb") as f:
@@ -229,7 +250,7 @@ class Server:
                 flag=SegmentFlag(0b0001),
                 checksum=None
             ),
-            payload=f"{filename}:{self.connections[addr]['curFileSize']}".encode(
+            payload=f"{self.connections[addr]['curFileName']}:{self.connections[addr]['curFileSize']}".encode(
             )
         ), addr)
 
