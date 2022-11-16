@@ -31,9 +31,9 @@ class Server:
             is_valid = seg.valid_checksum()
             
             if is_valid:
-                # print(f"{seg.header['seq_num']} | {self.connections[addr]['ack_num']} | {seg.header['ack_num']} | {self.connections[addr]['seq_num']}")
                 # Add to queue
                 self.queue.append((addr, seg))
+                
                 # Distribute
                 if (self.distributor is None) or (not self.distributor.is_alive()):
                     self.distributor = Thread(target=self._distribute)
@@ -73,6 +73,7 @@ class Server:
                         self.threads[conn['addr']] = Thread(target=self._send_window(
                             conn['addr'], conn['ack_num']))
                         self.threads[conn['addr']].start()
+
                     elif conn['state'] == "FIN_WAIT_1":
                         self.threads[conn['addr']] = Thread(target=self.socket.send(
                             Segment.FIN(), conn['addr']))
@@ -85,9 +86,9 @@ class Server:
             print("Current thread count:", threading.active_count())
 
     def _distribute(self):
+        
         while len(self.queue) > 0:
             addr, seg = self.queue.pop(0)
-            print(f"------------------")
             
             if addr not in self.threads.keys() or self.threads[addr] is None:
                 # If the thread doesn't exist, create it
@@ -96,7 +97,6 @@ class Server:
                 self.threads[addr].start()
             else:
                 # If the thread exists, wait for it to finish, then create a new one
-                print(f"{threading.get_native_id()} : {addr} {seg}")
                 # If old sequence is in the queue, ignore it
                 if (seg.flag == "DEFAULT" and seg.header['seq_num'] < self.connections[addr]['ack_num']):
                     continue
@@ -104,7 +104,7 @@ class Server:
                 self.threads[addr] = Thread(
                     target=self._handle_connection, args=(seg, addr))
                 self.threads[addr].start()
-                print(f"state {self.connections[addr]['state']}")
+                
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
         if addr not in self.connections.keys():
@@ -120,7 +120,6 @@ class Server:
 
         # Header = Received 
         header = seg.header
-        print(">>>>" , threading.get_native_id())
         # Connection State
         state = self.connections[addr]['state']
 
@@ -184,13 +183,12 @@ class Server:
 
 
                 # If ACK already received in the past, ignore
-                elif header['seq_num'] < self.connections[addr]['ack_num']:
-                    print(f"{threading.get_native_id()} [!] ACK number {header['seq_num']} udh pernah mas | Sb ({self.connections[addr]['ack_num']})")
-                    # self.connections[addr]['ack_num'] = header['seq_num']
-                    self._send_window(addr, self.connections[addr]['ack_num'])
+                # elif header['seq_num'] < self.connections[addr]['ack_num']:
+                #     print(f"{threading.get_native_id()} [!] ACK number {header['seq_num']} udh pernah mas | Sb ({self.connections[addr]['ack_num']})")
+                #     # self.connections[addr]['ack_num'] = header['seq_num']
+                #     self._send_window(addr, self.connections[addr]['ack_num'])
                 # seq loss
                 else:
-                    print(f"{header['seq_num']} | {self.connections[addr]['ack_num']} | {header['ack_num']} | {self.connections[addr]['seq_num']}")
                     print(
                         f"{threading.get_native_id()} [!] ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
                     self._send_window(addr, self.connections[addr]['ack_num'])
@@ -232,7 +230,7 @@ class Server:
 
     def _send_window(self, addr: Tuple[str, int], Sb: int = 1):
         # Prevent server sending Sequence > segmentCount
-        Sm = min(WINDOW_SIZE + Sb, math.ceil(
+        Sm = min(WINDOW_SIZE + Sb - 1, math.ceil(
                 self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD)) - Sb
         # Loop from Sb to Sm
         
