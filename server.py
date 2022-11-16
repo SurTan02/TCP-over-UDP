@@ -183,10 +183,10 @@ class Server:
 
 
                 # If ACK already received in the past, ignore
-                # elif header['seq_num'] < self.connections[addr]['ack_num']:
-                #     print(f"{threading.get_native_id()} [!] ACK number {header['seq_num']} udh pernah mas | Sb ({self.connections[addr]['ack_num']})")
-                #     # self.connections[addr]['ack_num'] = header['seq_num']
-                #     self._send_window(addr, self.connections[addr]['ack_num'])
+                elif header['seq_num'] < self.connections[addr]['ack_num']:
+                    print(f"{threading.get_native_id()} [!] ACK number {header['seq_num']} duplicate | ignore... | Sb ({self.connections[addr]['ack_num']})")
+                    # self.connections[addr]['ack_num'] = header['seq_num']
+                    # self._send_window(addr, self.connections[addr]['ack_num'])
                 # seq loss
                 else:
                     print(
