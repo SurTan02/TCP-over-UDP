@@ -23,6 +23,11 @@ class Server:
         self.threads = {}
         self.queue = []
         self.distributor = None
+        self.parallel = False
+
+        # Lock purposes
+        self.listening = True
+        self.transferring = False
 
     def listen(self):
         try:
@@ -82,8 +87,10 @@ class Server:
                         self.threads[conn['addr']] = Thread(target=self.socket.send(
                             Segment.FIN_ACK(), conn['addr']))
                         self.threads[conn['addr']].start()
-            print(f"[!] Error: {e}")
-            print("Current thread count:", threading.active_count())
+            # TODO: konfirmasi print error butuh atau ndak
+            if (self.parallel):
+                print(f"[!] Error: {e}")
+                print("Current thread count:", threading.active_count())
 
     def _distribute(self):
         
@@ -135,7 +142,13 @@ class Server:
                 self.connections[addr]['seq_num'] = 1
                 self.connections[addr]['ack_num'] = 1
                 print("SocketConnection established with", addr)
-                
+
+                # For not parallel server
+                if (not self.parallel):
+                    stillListening = input(f"\n[?] Do you want to keep listening? (y/n) ")
+                    while stillListening.lower() not in ["y", "n"]:
+                        stillListening = input(f"[?] Do you want to keep listening? (y/n) ")
+                    server.listening = stillListening.lower() == "y"
         elif state == "SYN_SENT":
             if header['flag'] == "SYN-ACK":
                 self.socket.send(Segment.ACK(), addr)
@@ -211,6 +224,8 @@ class Server:
                 self.socket.send(Segment.ACK(), addr)
                 del self.connections[addr]
                 print("SocketConnection closed with", addr)
+                if (not self.parallel):
+                    self.transferring = False
 
     def _send_seq(self, addr: Tuple[str, int], Sn: int):
         # Seek file to the correct position
@@ -253,6 +268,8 @@ class Server:
 
     # To initiate file transfer, send metadata first
     def file_transfer(self, addr, path):
+        if (not self.parallel):
+            self.transferring = True
         if self.connections[addr]['state'] != "ESTABLISHED":
             return
         self.connections[addr]['curFileName'] = path.split("/")[-1]
@@ -286,18 +303,48 @@ if __name__ == '__main__':
 
         server = Server("127.0.0.1", broadcast)
         print(f"[!] Server started at 127.0.0.1:{broadcast}...")
+        print(f"[!] Source file | {path.split('/')[-1]}...")
+        print(f"[!] Listening to broadcast address for clients...")
+        parallel = input(f"[?] Do you want to run in parallel? (y/n) ")
+        while parallel.lower() not in ["y", "n"]:
+            parallel = input(f"[?] Do you want to run in parallel? (y/n) ")
+        server.parallel = parallel.lower() == "y"
+
         while True:
-            # Listen
-            server.listen()
+            if (server.parallel):
+                # Listen
+                server.listen()
 
-            # File Transfer
-            count = 0
-            for conn in server.connections.keys():
-                if server.connections[conn]['state'] == "ESTABLISHED":
-                    count += 1
-
-            if count == 1:
+                # File Transfer
+                count = 0
                 for conn in server.connections.keys():
                     if server.connections[conn]['state'] == "ESTABLISHED":
-                        print(f"[!] Sending file to {conn[0]}:{conn[1]}")
-                        server.file_transfer(conn, path)
+                        count += 1
+
+                if count == 1:
+                    for conn in server.connections.keys():
+                        if server.connections[conn]['state'] == "ESTABLISHED":
+                            print(f"[!] Sending file to {conn[0]}:{conn[1]}")
+                            server.file_transfer(conn, path)
+            else:
+                if (server.listening):
+                    server.listen()
+                else:
+                    queue = []
+                    print("\nClient list:")
+                    for conn in server.connections.keys():
+                        if server.connections[conn]['state'] == "ESTABLISHED":
+                            queue.append(conn)
+                            print(f"{len(queue)}. {conn[0]}:{conn[1]}")
+                    print()
+                    while len(queue) != 0:
+                        if (not server.transferring):
+                            # Sequentially transfer file
+                            conn = queue.pop(0)
+                            print(f"[!] Sending file to {conn[0]}:{conn[1]}")
+                            server.file_transfer(conn, path)
+                        else:
+                            # Listen
+                            server.listen()
+
+                    server.listening = True

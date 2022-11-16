@@ -119,9 +119,9 @@ class Segment:
             self.data = bytes
 
     def __str__(self):
-        res = "|"
+        res = "| "
         for key, value in self.header.items():
-            res += f"{key}: {value}" + "|"
+            res += f"{key}: {value}" + " | "
         return res
 
     def _calculate_checksum(self) -> int:

@@ -29,7 +29,8 @@ class Client:
                 print("Invalid checksum from", addr)
         except Exception as e:
             # Handle Timeout
-            print(f"[!] Error: {e}")
+            if (str(e) != 'timed out'):
+                print(f"[!] Error: {e}")
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
         if self.addr is None:
@@ -174,5 +175,6 @@ if __name__ == '__main__':
                 main.listen()
 
             except Exception as e:
-                print(f"[!] Error: {e}")
+                if (str(e) != 'timed out'):
+                    print(f"[!] Error: {e}")
                 continue
