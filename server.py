@@ -15,6 +15,8 @@ class Server:
     threads: Dict[Tuple[str, int], Thread]
     queue: List[Tuple[Tuple[str, int], Segment]]
     distributor: Thread
+    queue_lock = threading.Lock()
+    connection_lock = threading.Lock()
 
     def __init__(self, ip: str, port: int):
         self.socket = SocketConnection(ip, port)
@@ -30,7 +32,9 @@ class Server:
             is_valid = seg.valid_checksum()
             if is_valid:
                 # Add to queue
+                self.queue_lock.acquire()
                 self.queue.append((addr, seg))
+                self.queue_lock.release()
                 # Distribute
                 if (self.distributor is None) or (not self.distributor.is_alive()):
                     self.distributor = Thread(target=self._distribute)
@@ -76,7 +80,9 @@ class Server:
 
     def _distribute(self):
         while len(self.queue) > 0:
+            self.queue_lock.acquire()
             addr, seg = self.queue.pop(0)
+            self.queue_lock.release()
             if addr not in self.threads.keys() or self.threads[addr] is None:
                 # If the thread doesn't exist, create it
                 self.threads[addr] = Thread(
@@ -109,6 +115,8 @@ class Server:
 
         # Connection State
         state = self.connections[addr]['state']
+
+        self.connection_lock.acquire()
 
         # Three Way Handshake, after this seq_num and ack_num will be equal to 1
         if state == "LISTEN":
@@ -188,6 +196,8 @@ class Server:
                 self.socket.send(Segment.ACK(), addr)
                 del self.connections[addr]
                 print("SocketConnection closed with", addr)
+
+        self.connection_lock.release()
 
     def _send_seq(self, addr: Tuple[str, int], Sn: int):
         # Seek file to the correct position

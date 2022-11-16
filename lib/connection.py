@@ -32,8 +32,8 @@ class SocketConnection:
         self._lock.acquire()
         print(">", dest, msg)
         self.socket.sendto(msg.bytes, dest)
-        self._lock.release()
         time.sleep(0.05)
+        self._lock.release()
 
     def listen(self) -> Tuple[Segment, Tuple[str, int]]:
         data, addr = self.socket.recvfrom(32768)
