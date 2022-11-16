@@ -1,10 +1,11 @@
-import sys
 import math
+import sys
+import threading
+from threading import Thread
 from typing import Dict, List, Tuple
+
 from lib.connection import Connection, SocketConnection
 from lib.segment import Segment, SegmentFlag, SegmentHeader
-from threading import Thread
-import threading
 
 WINDOW_SIZE = 4
 
@@ -25,10 +26,12 @@ class Server:
 
     def listen(self):
         try:
+            
             seg, addr = self.socket.listen()
-
             is_valid = seg.valid_checksum()
+            
             if is_valid:
+                # print(f"{seg.header['seq_num']} | {self.connections[addr]['ack_num']} | {seg.header['ack_num']} | {self.connections[addr]['seq_num']}")
                 # Add to queue
                 self.queue.append((addr, seg))
                 # Distribute
@@ -39,13 +42,16 @@ class Server:
                 print("Invalid checksum from", addr)
         except Exception as e:
             # Handle Timeout
+            # print(self.connections)
             for conn in self.connections.values():
                 if self.threads[conn['addr']] is None or not self.threads[conn['addr']].is_alive():
+
                     # If time out after sending syn_ack, resend syn_ack
                     if conn['state'] == "SYN_RCVD":
                         self.threads[conn['addr']] = Thread(target=self.socket.send(
                             Segment.SYN_ACK(), conn['addr']))
                         self.threads[conn['addr']].start()
+
                     # If time out after sending metadata, resend metadata
                     elif conn['state'] == "SND_META":
                         self.threads[conn['addr']] = Thread(target=self.socket.send(
@@ -59,7 +65,11 @@ class Server:
                                 )
                             ), conn['addr']))
                         self.threads[conn['addr']].start()
+
                     elif conn['state'] == "SND_FILE":
+                        
+                        print(f"OH NO, resend {conn['ack_num']}")
+                        
                         self.threads[conn['addr']] = Thread(target=self._send_window(
                             conn['addr'], conn['ack_num']))
                         self.threads[conn['addr']].start()
@@ -77,6 +87,8 @@ class Server:
     def _distribute(self):
         while len(self.queue) > 0:
             addr, seg = self.queue.pop(0)
+            print(f"------------------")
+            
             if addr not in self.threads.keys() or self.threads[addr] is None:
                 # If the thread doesn't exist, create it
                 self.threads[addr] = Thread(
@@ -84,7 +96,7 @@ class Server:
                 self.threads[addr].start()
             else:
                 # If the thread exists, wait for it to finish, then create a new one
-
+                print(f"{threading.get_native_id()} : {addr} {seg}")
                 # If old sequence is in the queue, ignore it
                 if (seg.flag == "DEFAULT" and seg.header['seq_num'] < self.connections[addr]['ack_num']):
                     continue
@@ -92,6 +104,7 @@ class Server:
                 self.threads[addr] = Thread(
                     target=self._handle_connection, args=(seg, addr))
                 self.threads[addr].start()
+                print(f"state {self.connections[addr]['state']}")
 
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
         if addr not in self.connections.keys():
@@ -105,8 +118,9 @@ class Server:
                 'curFileSize': 0,
             }
 
+        # Header = Received 
         header = seg.header
-
+        print(">>>>" , threading.get_native_id())
         # Connection State
         state = self.connections[addr]['state']
 
@@ -115,12 +129,14 @@ class Server:
             if header['flag'] == "SYN":
                 self.socket.send(Segment.SYN_ACK(), addr)
                 self.connections[addr]['state'] = "SYN_RCVD"
+
         elif state == "SYN_RCVD":
             if header['flag'] == "ACK":
                 self.connections[addr]['state'] = "ESTABLISHED"
                 self.connections[addr]['seq_num'] = 1
                 self.connections[addr]['ack_num'] = 1
                 print("SocketConnection established with", addr)
+                
         elif state == "SYN_SENT":
             if header['flag'] == "SYN-ACK":
                 self.socket.send(Segment.ACK(), addr)
@@ -148,7 +164,7 @@ class Server:
                 if header['seq_num'] == self.connections[addr]['ack_num']:
                     # TODO: Improve this to handle store acks in buffer before sliding the window
                     print(
-                        f"[!] {addr} RCV ACK {header['seq_num']} | REQ {header['ack_num']}")
+                        f"{threading.get_native_id()} [!] {addr} RCV ACK {header['seq_num']} | REQ {header['ack_num']}")
                     # Preparing to send the next sequence
                     # Update seq_num and ack_num
                     self.connections[addr]['seq_num'] = header['ack_num']
@@ -160,14 +176,23 @@ class Server:
                     Sb = self.connections[addr]['ack_num']
                     # Sliding Window Last Sequencee
                     Sm = min(Sb + WINDOW_SIZE, segmentCount)
-                    if (header['ack_num']) <= Sm:
+                    if (header['ack_num'] + WINDOW_SIZE) <= Sm:
                         print("[!] Sending sequence",
                               header['ack_num'] + WINDOW_SIZE - 1)
                         self._send_seq(
                             addr, header['ack_num'] + WINDOW_SIZE - 1)
+
+
+                # If ACK already received in the past, ignore
+                elif header['seq_num'] < self.connections[addr]['ack_num']:
+                    print(f"{threading.get_native_id()} [!] ACK number {header['seq_num']} udh pernah mas | Sb ({self.connections[addr]['ack_num']})")
+                    # self.connections[addr]['ack_num'] = header['seq_num']
+                    self._send_window(addr, self.connections[addr]['ack_num'])
+                # seq loss
                 else:
+                    print(f"{header['seq_num']} | {self.connections[addr]['ack_num']} | {header['ack_num']} | {self.connections[addr]['seq_num']}")
                     print(
-                        f"[!] ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
+                        f"{threading.get_native_id()} [!] ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
                     self._send_window(addr, self.connections[addr]['ack_num'])
 
                  # If that is the last ack
@@ -206,15 +231,12 @@ class Server:
         self.socket.send(seq, addr)
 
     def _send_window(self, addr: Tuple[str, int], Sb: int = 1):
-        # Get Sm fron the window
-        if Sb + WINDOW_SIZE > math.ceil(self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD):
-            Sm = math.ceil(
-                self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD)
-        else:
-            Sm = Sb + WINDOW_SIZE - 1
-
+        # Prevent server sending Sequence > segmentCount
+        Sm = min(WINDOW_SIZE + Sb, math.ceil(
+                self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD)) - Sb
         # Loop from Sb to Sm
-        for i in range(Sm - Sb + 1):
+        
+        for i in range(Sm + 1):
             # Seek file to the correct position
             self.connections[addr]['curFile'].seek(
                 Segment.SEGMENT_PAYLOAD * (Sb - 1 + i), 0)
@@ -228,7 +250,7 @@ class Server:
                 ),
                 payload=self.connections[addr]['curFile'].read(Segment.SEGMENT_PAYLOAD))
             # Send Segment
-            print(f"Sending Window | Sequence = {Sb + i}")
+            print(f"{threading.get_native_id()} Sending Window | Sequence = {Sb + i}")
             self.socket.send(seg, addr)
 
     # To initiate file transfer, send metadata first
