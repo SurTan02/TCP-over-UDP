@@ -3,6 +3,7 @@ from .segment import Segment, SegmentHeader
 from typing import Tuple, List, TypedDict, Union
 from io import BufferedReader, BufferedWriter
 from threading import Lock
+import time
 
 
 # State for connection
@@ -32,6 +33,7 @@ class SocketConnection:
         print(">", dest, msg)
         self.socket.sendto(msg.bytes, dest)
         self._lock.release()
+        time.sleep(0.05)
 
     def listen(self) -> Tuple[Segment, Tuple[str, int]]:
         data, addr = self.socket.recvfrom(32768)
