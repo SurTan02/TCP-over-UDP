@@ -31,19 +31,6 @@ class Client:
             # Handle Timeout
             print(f"[!] Error: {e}")
 
-    def _send_ack(self, ack_num: int, seq_num: int = 0):
-        if ack_num >= 0:
-            ack_resp = Segment(
-                header={
-                    "seq_num": seq_num,
-                    "ack_num": ack_num,
-                    "flag": SegmentFlag.get_flag("ACK"),
-                    "checksum": None
-                },
-                payload=b""
-            )
-            self.socket.send(ack_resp, self.addr)
-
     def _handle_connection(self, seg: Segment, addr: Tuple[str, int]):
         if self.addr is None:
             self.addr = addr
