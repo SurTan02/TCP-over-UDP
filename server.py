@@ -43,8 +43,9 @@ class Server:
                 if (self.distributor is None) or (not self.distributor.is_alive()):
                     self.distributor = Thread(target=self._distribute)
                     self.distributor.start()
+
             else:  # Gatau mo ngapain ini, seharusnya buang aja
-                print("Invalid checksum from", addr)
+                print(f"[!] Invalid checksum from {addr}")
         except Exception as e:
             # Handle Timeout
             # print(self.connections)
@@ -62,7 +63,7 @@ class Server:
                         self.threads[conn['addr']] = Thread(target=self.socket.send(
                             Segment(
                                 header=SegmentHeader(
-                                    flag=SegmentFlag(0b0010),
+                                    flag=SegmentFlag(0b0001),
                                     seq_num=conn['seq_num'],
                                     ack_num=conn['ack_num'],
                                     checksum=None),
@@ -72,9 +73,6 @@ class Server:
                         self.threads[conn['addr']].start()
 
                     elif conn['state'] == "SND_FILE":
-                        
-                        print(f"OH NO, resend {conn['ack_num']}")
-                        
                         self.threads[conn['addr']] = Thread(target=self._send_window(
                             conn['addr'], conn['ack_num']))
                         self.threads[conn['addr']].start()
@@ -90,7 +88,6 @@ class Server:
             # TODO: konfirmasi print error butuh atau ndak
             if (self.parallel):
                 print(f"[!] Error: {e}")
-                print("Current thread count:", threading.active_count())
 
     def _distribute(self):
         
@@ -141,7 +138,7 @@ class Server:
                 self.connections[addr]['state'] = "ESTABLISHED"
                 self.connections[addr]['seq_num'] = 1
                 self.connections[addr]['ack_num'] = 1
-                print("SocketConnection established with", addr)
+                print(f"[-] SocketConnection established with {addr}")
 
                 # For not parallel server
                 if (not self.parallel):
@@ -176,7 +173,7 @@ class Server:
                 if header['seq_num'] == self.connections[addr]['ack_num']:
                     # TODO: Improve this to handle store acks in buffer before sliding the window
                     print(
-                        f"{threading.get_native_id()} [!] {addr} RCV ACK {header['seq_num']} | REQ {header['ack_num']}")
+                        f"[-] {addr} RCV ACK {header['seq_num']} | REQ {header['ack_num']}")
                     # Preparing to send the next sequence
                     # Update seq_num and ack_num
                     self.connections[addr]['seq_num'] = header['ack_num']
@@ -195,20 +192,20 @@ class Server:
                             addr, header['ack_num'] + WINDOW_SIZE - 1)
 
 
-                # If ACK already received in the past, ignore
+                # If ACK already received before, ignore
                 elif header['seq_num'] < self.connections[addr]['ack_num']:
-                    print(f"{threading.get_native_id()} [!] ACK number {header['seq_num']} duplicate | ignore... | Sb ({self.connections[addr]['ack_num']})")
-                    # self.connections[addr]['ack_num'] = header['seq_num']
-                    # self._send_window(addr, self.connections[addr]['ack_num'])
+                    print(f"[!] ACK number {header['seq_num']} duplicate | ignore... | Sb ({header['ack_num']})")
+                    self.connections[addr]['ack_num'] = header['ack_num']
+                    
                 # seq loss
                 else:
                     print(
-                        f"{threading.get_native_id()} [!] ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
+                        f"[!] ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
                     self._send_window(addr, self.connections[addr]['ack_num'])
 
                  # If that is the last ack
                 if self.connections[addr]['ack_num'] >= math.ceil(self.connections[addr]['curFileSize'] / Segment.SEGMENT_PAYLOAD) + 1:
-                    print(f"[!] Successfully sent file to {addr[0]}:{addr[1]}")
+                    print(f"[-] Successfully sent file to {addr[0]}:{addr[1]}")
                     self.socket.send(Segment.FIN(), addr)
                     self.connections[addr]['state'] = "FIN_WAIT_1"
             else:
@@ -223,7 +220,7 @@ class Server:
             if header['flag'] == "ACK":
                 self.socket.send(Segment.ACK(), addr)
                 del self.connections[addr]
-                print("SocketConnection closed with", addr)
+                print(f"[-] SocketConnection closed with {addr}")
                 if (not self.parallel):
                     self.transferring = False
 
@@ -263,7 +260,7 @@ class Server:
                 ),
                 payload=self.connections[addr]['curFile'].read(Segment.SEGMENT_PAYLOAD))
             # Send Segment
-            print(f"{threading.get_native_id()} Sending Window | Sequence = {Sb + i}")
+            print(f"[-] Sending Window | Sequence = {Sb + i}")
             self.socket.send(seg, addr)
 
     # To initiate file transfer, send metadata first
@@ -295,16 +292,16 @@ class Server:
 if __name__ == '__main__':
 
     if len(sys.argv) != 3:
-        print(f"Error: {len(sys.argv)} argumennts given, expected 3")
+        print(f"[!] Error: {len(sys.argv)} argumennts given, expected 3")
         print("server.py [broadcast port] [path file input]")
     else:
         broadcast = int(sys.argv[1])
         path = sys.argv[2]
 
         server = Server("127.0.0.1", broadcast)
-        print(f"[!] Server started at 127.0.0.1:{broadcast}...")
-        print(f"[!] Source file | {path.split('/')[-1]}...")
-        print(f"[!] Listening to broadcast address for clients...")
+        print(f"[-] Server started at 127.0.0.1:{broadcast}...")
+        print(f"[-] Source file | {path.split('/')[-1]}...")
+        print(f"[-] Listening to broadcast address for clients...")
         parallel = input(f"[?] Do you want to run in parallel? (y/n) ")
         while parallel.lower() not in ["y", "n"]:
             parallel = input(f"[?] Do you want to run in parallel? (y/n) ")
@@ -324,7 +321,7 @@ if __name__ == '__main__':
                 if count == 1:
                     for conn in server.connections.keys():
                         if server.connections[conn]['state'] == "ESTABLISHED":
-                            print(f"[!] Sending file to {conn[0]}:{conn[1]}")
+                            print(f"[-] Sending file to {conn[0]}:{conn[1]}")
                             server.file_transfer(conn, path)
             else:
                 if (server.listening):
@@ -341,7 +338,7 @@ if __name__ == '__main__':
                         if (not server.transferring):
                             # Sequentially transfer file
                             conn = queue.pop(0)
-                            print(f"[!] Sending file to {conn[0]}:{conn[1]}")
+                            print(f"[-] Sending file to {conn[0]}:{conn[1]}")
                             server.file_transfer(conn, path)
                         else:
                             # Listen

@@ -3,9 +3,6 @@ from lib.connection import SocketConnection, Connection
 from lib.segment import Segment, SegmentHeader, SegmentFlag
 from typing import Tuple, List, Dict
 
-WINDOW_SIZE = 4
-
-
 class Client:
     socket: SocketConnection
     addr: Tuple[str, int]
@@ -26,7 +23,7 @@ class Client:
             if is_valid:
                 self._handle_connection(seg, addr)
             else:  # Gatau mo ngapain ini, seharusnya buang aja
-                print("Invalid checksum from", addr)
+                print(f"[!] Invalid checksum from {addr}")
         except Exception as e:
             # Handle Timeout
             if (str(e) != 'timed out'):
@@ -61,7 +58,7 @@ class Client:
                 self.connection['state'] = "ESTABLISHED"
                 self.connection['seq_num'] = 1
                 self.connection['ack_num'] = 1
-                print("SocketConnection established with", addr)
+                print(f"[-] SocketConnection established with {addr}")
 
         elif state == "SYN_SENT":
             if header['flag'] == "SYN-ACK":
@@ -69,7 +66,7 @@ class Client:
                 self.connection['state'] = "ESTABLISHED"
                 self.connection['seq_num'] = 1
                 self.connection['ack_num'] = 1
-                print("SocketConnection established with", addr)
+                print(f"[-] SocketConnection established with {addr}")
 
         # Metadata Format: <filename>:<filesize> less than 32 MB
         # Receive Metadata File
@@ -104,18 +101,18 @@ class Client:
 
                     # Send ACK
                     print(
-                        f"Send ACK = {self.connection['seq_num']} | Request Seq = {self.connection['ack_num']}")
+                        f"[-] Send ACK = {self.connection['seq_num']} | Request Seq = {self.connection['ack_num']}")
                     self.socket.send(Segment.ACK(
                         self.connection['seq_num'], self.connection['ack_num']), addr)
                 # Resend ACK for sequence number that already received
                 elif (header['seq_num'] < self.connection['ack_num']):
                     # Send ACK
                     print(
-                        f"Send ACK = {header['seq_num']} | Request Seq = {self.connection['ack_num']}")
+                        f"[-] Resend ACK = {header['seq_num']} | Request Seq = {self.connection['ack_num']}")
                     self.socket.send(Segment.ACK(
                         header['seq_num'], self.connection['ack_num']), addr)
                 else:
-                    print("Wrong seq_num, expected",
+                    print("[!] Wrong seq_num, expected",
                           self.connection['ack_num'], "got", header['seq_num'])
                     return
 
@@ -126,7 +123,7 @@ class Client:
                     self.connection['payload'].rstrip(b'\x00'))
                 self.connection['curFile'].close()
                 print(
-                    f"[!] Successfully received file from {addr[0]}:{addr[1]}")
+                    f"[-] Successfully received file from {addr[0]}:{addr[1]}")
                 self.socket.send(Segment.FIN_ACK(), addr)
 
         elif state == "CLOSE_WAIT":
@@ -138,7 +135,7 @@ class Client:
         elif state == "LAST_ACK":
             if header['flag'] == "ACK":
                 self.connection = None
-                print("SocketConnection closed with", addr)
+                print(f"[-] SocketConnection closed with {addr}")
 
     def connect(self, ip: str, port: int):
         self.socket.send(Segment.SYN(), (ip, port))
@@ -159,7 +156,7 @@ class Client:
 
 if __name__ == '__main__':
     if len(sys.argv) != 4:
-        print(f"Error: {len(sys.argv)} arguments given, expected 4")
+        print(f"[!] Error: {len(sys.argv)} arguments given, expected 4")
         print("client.py [client port] [broadcast port] [path output]")
     else:
 
@@ -173,7 +170,6 @@ if __name__ == '__main__':
         while True:
             try:
                 main.listen()
-
             except Exception as e:
                 if (str(e) != 'timed out'):
                     print(f"[!] Error: {e}")
