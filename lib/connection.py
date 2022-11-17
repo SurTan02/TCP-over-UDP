@@ -30,14 +30,14 @@ class SocketConnection:
 
     def send(self, msg: Segment, dest: Tuple[str, int]):
         self._lock.acquire()
-        print(">", dest, msg)
+        # print(">", dest, msg)
         self.socket.sendto(msg.bytes, dest)
         self._lock.release()
         time.sleep(0.05)
 
     def listen(self) -> Tuple[Segment, Tuple[str, int]]:
         data, addr = self.socket.recvfrom(32768)
-        print("<", addr, Segment(data))
+        # print("<", addr, Segment(data))
         return Segment(data), addr
 
     def close_socket(self):

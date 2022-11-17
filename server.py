@@ -186,21 +186,20 @@ class Server:
                     # Sliding Window Last Sequencee
                     Sm = min(Sb + WINDOW_SIZE, segmentCount)
                     if (header['ack_num'] + WINDOW_SIZE) <= Sm:
-                        print("[!] Sending sequence",
-                              header['ack_num'] + WINDOW_SIZE - 1)
+                        print(f"[-] {addr} Sending sequence {header['ack_num'] + WINDOW_SIZE - 1}")
                         self._send_seq(
                             addr, header['ack_num'] + WINDOW_SIZE - 1)
 
 
                 # If ACK already received before, ignore
                 elif header['seq_num'] < self.connections[addr]['ack_num']:
-                    print(f"[!] ACK number {header['seq_num']} duplicate | ignore... | Sb ({header['ack_num']})")
+                    print(f"[!] {addr} ACK number {header['seq_num']} duplicate | ignore... | Sb ({header['ack_num']})")
                     self.connections[addr]['ack_num'] = header['ack_num']
                     
                 # seq loss
                 else:
                     print(
-                        f"[!] ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
+                        f"[!] {addr} ACK number {header['seq_num']} is not matched with Sb ({self.connections[addr]['ack_num']})")
                     self._send_window(addr, self.connections[addr]['ack_num'])
 
                  # If that is the last ack
@@ -209,7 +208,7 @@ class Server:
                     self.socket.send(Segment.FIN(), addr)
                     self.connections[addr]['state'] = "FIN_WAIT_1"
             else:
-                print(f"[!] Checksum failed")
+                print(f"[!] {addr} Checksum failed")
         # Double Two Way Handshake
         elif state == "FIN_WAIT_1":
             if header['flag'] == "FIN-ACK":
@@ -260,7 +259,7 @@ class Server:
                 ),
                 payload=self.connections[addr]['curFile'].read(Segment.SEGMENT_PAYLOAD))
             # Send Segment
-            print(f"[-] Sending Window | Sequence = {Sb + i}")
+            print(f"[-] {addr} Sending Window | Sequence = {Sb + i}")
             self.socket.send(seg, addr)
 
     # To initiate file transfer, send metadata first
