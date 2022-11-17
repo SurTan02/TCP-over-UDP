@@ -26,9 +26,11 @@ cd jarkom-syahrul-botak
 `python client.py [client port] [broadcast port] [output path]`
 
 #### Command Example
-`python server.py 7000 files/<filename>`
-`python client.py 7001 7000 received`
-`python client.py 7002 7000 received`
+```
+python server.py 7000 files/<filename>
+python client.py 7001 7000 received
+python client.py 7002 7000 received
+```
 
 ## Author
 | NIM      | Nama                       |
